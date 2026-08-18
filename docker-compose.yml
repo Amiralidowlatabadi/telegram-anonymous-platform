@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: anon_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-anon_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-UltraSecurePassword123!}
+      POSTGRES_DB: ${POSTGRES_DB:-anon_platform_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-anon_user} -d ${POSTGRES_DB:-anon_platform_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - anon_network
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: anon_redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-UltraSecureRedisPass123!}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-UltraSecureRedisPass123!}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - anon_network
+
+networks:
+  anon_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

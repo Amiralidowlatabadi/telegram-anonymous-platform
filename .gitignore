@@ -1,0 +1,33 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environment Variables & Secrets (بسیار مهم: توکن بات تلگرام و دیتابیس)
+.env
+.env.local
+.env.*.local
+
+# Package build & egg info
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Database / Local storage
+*.sqlite3
+*.db
+
+# IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
