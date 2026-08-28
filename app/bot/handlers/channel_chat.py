@@ -2,8 +2,8 @@ import uuid
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.models import User
-from app.database.repositories import ChannelRepository, LinkRepository
+from app.database.models import User, ChannelLink
+from app.database.repositories import ChannelRepository
 from app.services.channel_publisher import ChannelPublisherService
 from app.services.moderation_service import ContentModerationFilter
 from app.bot.states import ChannelChatStates
@@ -51,12 +51,7 @@ async def process_channel_submission(
             return
 
     channel_repo = ChannelRepository(db_session)
-    link_repo = LinkRepository(db_session)
     channel = await channel_repo.get_channel_by_id(uuid.UUID(channel_id_str))
-    channel_link = await db_session.get(link_repo.repo_model if hasattr(link_repo, 'repo_model') else type(channel), uuid.UUID(link_id_str)) if hasattr(link_repo, 'repo_model') else await db_session.get(type(channel), uuid.UUID(channel_id_str)) # fallback
-    
-    # Safe retrieval
-    from app.database.models import ChannelLink
     channel_link_entity = await db_session.get(ChannelLink, uuid.UUID(link_id_str))
 
     if not channel or not channel_link_entity or not channel.is_active or not channel_link_entity.is_active:

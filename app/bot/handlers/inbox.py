@@ -1,9 +1,12 @@
 import uuid
 from aiogram import Router, types, F
+from aiogram.fsm.context import FSMContext
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database.models import User
+from app.database.models import User, ConversationMessage
 from app.database.repositories import ConversationRepository
 from app.services.message_router import MessageRouter
+from app.bot.states import PersonalChatStates
 from app.bot.keyboards import get_cancel_keyboard, get_main_menu_keyboard
 from app.core.i18n import get_text
 from app.core.exceptions import AppError
@@ -29,23 +32,52 @@ async def show_inbox(message: types.Message, db_user: User, db_session: AsyncSes
     kb = types.InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer(text, reply_markup=kb)
 
+@router.callback_query(F.data.startswith("open_conv:"))
+async def handle_open_conversation(
+    call: types.CallbackQuery,
+    db_user: User,
+    db_session: AsyncSession
+):
+    conv_id_str = call.data.split(":")[1]
+    conv_repo = ConversationRepository(db_session)
+    conv = await conv_repo.get_by_id(uuid.UUID(conv_id_str))
+    
+    if not conv or conv.owner_id != db_user.id:
+        await call.answer("گفتگوی مورد نظر یافت نشد.", show_alert=True)
+        return
+
+    stmt = select(ConversationMessage).where(
+        ConversationMessage.conversation_id == conv.id
+    ).order_by(ConversationMessage.created_at.desc()).limit(1)
+    res = await db_session.execute(stmt)
+    last_msg = res.scalar_one_or_none()
+
+    status_icon = "🟢 فعال" if conv.status == "ACTIVE" else "🔴 غیرفعال"
+    details = f"💬 **اطلاعات گفتگو:**\n\nوضعیت: {status_icon}\n"
+    if last_msg:
+        details += f"آخرین پیام: {last_msg.created_at.strftime('%Y-%m-%d %H:%M')}\nنوع محتوا: {last_msg.content_type}"
+    
+    kb = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [types.InlineKeyboardButton(text="↩️ پاسخ به این گفتگو", callback_data=f"reply_msg:{conv.id}")],
+            [
+                types.InlineKeyboardButton(text="🚫 مسدود کردن", callback_data=f"block_conv:{conv.id}"),
+                types.InlineKeyboardButton(text="🚨 گزارش", callback_data=f"report_conv:{conv.id}"),
+            ]
+        ]
+    )
+    await call.message.answer(details, reply_markup=kb)
+    await call.answer()
+
 @router.callback_query(F.data.startswith("reply_msg:"))
 async def handle_reply_button_click(
     call: types.CallbackQuery,
+    state: FSMContext,
     db_user: User,
     db_session: AsyncSession,
     message_router: MessageRouter
 ):
     conv_id_str = call.data.split(":")[1]
-    conv_repo = ConversationRepository(db_session)
-    
-    # Locate last incoming message for this conversation
-    stmt = (
-        types.select(conv_repo.session.get_bind())
-        if False else None
-    )
-    from sqlalchemy import select
-    from app.database.models import ConversationMessage
     
     stmt = select(ConversationMessage).where(
         ConversationMessage.conversation_id == uuid.UUID(conv_id_str),
@@ -58,34 +90,32 @@ async def handle_reply_button_click(
         await call.answer("پیامی جهت پاسخ یافت نشد.", show_alert=True)
         return
 
-    # Lock active reply target strictly to this message
+    # Lock active reply target strictly to this message in Redis and FSM
     await message_router.set_active_reply_target(db_user.telegram_id, last_msg.id)
+    await state.set_state(PersonalChatStates.replying_to_message)
     await call.message.reply(
         get_text("reply_target_locked"),
         reply_markup=get_cancel_keyboard()
     )
     await call.answer()
 
-@router.message(F.text == get_text("btn_cancel"))
-async def cancel_active_reply(message: types.Message, db_user: User, message_router: MessageRouter):
-    await message_router.clear_active_reply_target(db_user.telegram_id)
-    await message.answer("حالت پاسخ لغو شد.", reply_markup=get_main_menu_keyboard())
-
-@router.message(F.reply_to_message | F.text | F.photo | F.video | F.voice)
+@router.message(PersonalChatStates.replying_to_message)
 async def process_owner_reply_dispatch(
     message: types.Message,
+    state: FSMContext,
     db_user: User,
-    db_session: AsyncSession,
     message_router: MessageRouter
 ):
-    active_target = await message_router.get_active_reply_target(db_user.telegram_id)
-    if not active_target:
-        # Not in active reply mode, let other standard handlers take over or ignore
+    if message.text == get_text("btn_cancel"):
+        await message_router.clear_active_reply_target(db_user.telegram_id)
+        await state.clear()
+        await message.answer("حالت پاسخ لغو شد.", reply_markup=get_main_menu_keyboard())
         return
 
     from app.bot.handlers.personal_chat import extract_payload
     content_type, payload = extract_payload(message)
     if content_type == "unknown":
+        await message.answer("⚠️ نوع فایل ارسالی پشتیبانی نمی‌شود.")
         return
 
     try:
@@ -94,6 +124,8 @@ async def process_owner_reply_dispatch(
             content_type=content_type,
             payload=payload
         )
+        await message_router.clear_active_reply_target(db_user.telegram_id)
+        await state.clear()
         await message.answer(get_text("reply_sent_success"), reply_markup=get_main_menu_keyboard())
     except AppError as e:
         await message.answer(f"❌ خطا در ارسال پاسخ: {e}")

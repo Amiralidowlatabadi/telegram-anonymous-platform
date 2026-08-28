@@ -2,6 +2,7 @@ from aiogram.fsm.state import State, StatesGroup
 
 class PersonalChatStates(StatesGroup):
     composing_message = State()
+    replying_to_message = State()
 
 class ChannelChatStates(StatesGroup):
     composing_post = State()

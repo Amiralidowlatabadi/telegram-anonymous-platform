@@ -47,7 +47,7 @@ async def process_anonymous_submission(
         return
 
     data = await state.get_data()
-    owner_id_str = data.get("target_owner_user_user_id") or data.get("target_owner_user_id")
+    owner_id_str = data.get("target_owner_user_id")
     link_id_str = data.get("target_personal_link_id")
 
     if not owner_id_str:

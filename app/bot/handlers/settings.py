@@ -13,7 +13,7 @@ from app.core.exceptions import AppError
 router = Router(name="settings_router")
 settings = get_settings()
 
-@router.message(F.text == get_text("btn_personal_link"))
+@router.message((F.text == get_text("btn_personal_link")) | (F.text == get_text("btn_settings")))
 async def view_personal_link(message: types.Message, db_user: User, db_session: AsyncSession):
     link_service = LinkService(db_session)
     link = await link_service.get_or_create_personal_link(db_user)
