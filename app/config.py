@@ -9,7 +9,6 @@ from typing import Optional
 class Settings(BaseSettings):
     bot_token: str = Field(..., description="Telegram Bot API Token")
     bot_username: str = Field(..., description="Telegram Bot Username without @")
-    proxy_url: Optional[str] = None  # مثال: "http://127.0.0.1:2081" یا "socks5://127.0.0.1:10808"
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

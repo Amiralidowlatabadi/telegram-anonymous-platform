@@ -5,7 +5,6 @@ import redis.asyncio as redis
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.types import ErrorEvent
 
@@ -28,11 +27,8 @@ logger = structlog.get_logger()
 async def main() -> None:
     config = get_settings()
     
-    session = AiohttpSession(proxy=config.proxy_url) if config.proxy_url else None
-    
     bot = Bot(
         token=config.bot_token,
-        session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
     )
     
